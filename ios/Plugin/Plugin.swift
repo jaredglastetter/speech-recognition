@@ -80,44 +80,47 @@ public class SpeechRecognition: CAPPlugin {
             let inputNode: AVAudioInputNode = self.audioEngine!.inputNode
             let format: AVAudioFormat = inputNode.outputFormat(forBus: 0)
 
-            self.recognitionTask = self.speechRecognizer?.recognitionTask(with: self.recognitionRequest!, resultHandler: { (result, error) in
-                if (result != nil) {
-                    let resultArray: NSMutableArray = NSMutableArray()
-                    var counter: Int = 0
+           if let unwrappedRecognitionRequest = self.recognitionRequest {
+    self.recognitionTask = self.speechRecognizer?.recognitionTask(with: unwrappedRecognitionRequest, resultHandler: { (result, error) in
+        if let validResult = result {
+            let resultArray: NSMutableArray = NSMutableArray()
+            var counter: Int = 0
 
-                    for transcription: SFTranscription in result!.transcriptions {
-                        if maxResults > 0 && counter < maxResults {
-                            resultArray.add(transcription.formattedString)
-                        }
-                        counter+=1
-                    }
-
-                    if (partialResults) {
-                        self.notifyListeners("partialResults", data: ["matches": resultArray])
-                    } else {
-                        call.resolve([
-                            "matches": resultArray
-                        ])
-                    }
-
-
-                    if result!.isFinal {
-                        self.audioEngine!.stop()
-                        self.audioEngine?.inputNode.removeTap(onBus: 0)
-                        self.recognitionTask = nil
-                        self.recognitionRequest = nil
-                    }
+            for transcription: SFTranscription in validResult.transcriptions {
+                if maxResults > 0 && counter < maxResults {
+                    resultArray.add(transcription.formattedString)
                 }
+                counter+=1
+            }
 
-                if (error != nil) {
-                    self.audioEngine!.stop()
-                    self.audioEngine?.inputNode.removeTap(onBus: 0)
-                    self.recognitionRequest = nil
-                    self.recognitionTask = nil
+            if (partialResults) {
+                self.notifyListeners("partialResults", data: ["matches": resultArray])
+            } else {
+                call.resolve([
+                    "matches": resultArray
+                ])
+            }
 
-                    call.reject(error!.localizedDescription)
-                }
-            })
+            if validResult.isFinal {
+                self.audioEngine?.stop()
+                self.audioEngine?.inputNode.removeTap(onBus: 0)
+                self.recognitionTask = nil
+                self.recognitionRequest = nil
+            }
+        }
+
+        if let validError = error {
+            self.audioEngine?.stop()
+            self.audioEngine?.inputNode.removeTap(onBus: 0)
+            self.recognitionRequest = nil
+            self.recognitionTask = nil
+
+            call.reject(validError.localizedDescription)
+        }
+    })
+} else {
+               return
+}
 
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { (buffer: AVAudioPCMBuffer, when: AVAudioTime) in
                 self.recognitionRequest?.append(buffer)
